@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import ProductGridSection from "../components/ProductGridSection";
@@ -26,6 +26,37 @@ const filterProducts = (list, filters) => {
     .filter((p) => (filters.inStock ? p.stock > 0 : true))
     .filter((p) => (filters.saleOnly ? p.oldPrice > p.price : true));
 };
+
+function DeferredSection({ minHeight = 420, children }) {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (visible) return undefined;
+
+    const target = ref.current;
+    if (!target) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  return (
+    <div ref={ref} style={visible ? undefined : { minHeight }}>
+      {visible ? children : null}
+    </div>
+  );
+}
 
 export default function HomePage() {
   const { products, user } = useStore();
@@ -55,9 +86,9 @@ export default function HomePage() {
         <div className="hero-product-bg" aria-label="Öne çıkan ürünler">
           <div className="hero-product-bg-lane">
             <div className="hero-product-bg-track">
-              {[...topTickerProducts, ...topTickerProducts, ...topTickerProducts].map((p, idx) => (
+              {[...topTickerProducts, ...topTickerProducts].map((p, idx) => (
                 <Link key={`${p.id}-bg-${idx}`} to={`/urun/${p.id}`} className="hero-product-bg-item">
-                  <img src={p.image} alt="" loading="lazy" />
+                  <img src={p.image} alt="" loading="lazy" decoding="async" fetchPriority="low" />
                   <div>
                     <p>{p.name}</p>
                     <strong>{p.price.toLocaleString("tr-TR")} TL</strong>
@@ -103,44 +134,56 @@ export default function HomePage() {
         </section>
       )}
 
-      <ProductGridSection title="En Popüler" subtitle="Topluluk tarafından en çok tercih edilen modeller" products={popular} gridClassName="home-product-grid" />
+      <DeferredSection minHeight={640}>
+        <ProductGridSection title="En Popüler" subtitle="Topluluk tarafından en çok tercih edilen modeller" products={popular} gridClassName="home-product-grid" />
+      </DeferredSection>
 
-      <section className="container campaign-split">
-        <article>
-          <img src="https://images.unsplash.com/photo-1460353581641-37baddab0fa2?q=80&w=1400&auto=format&fit=crop" alt="Koşu" />
-          <div>
-            <p className="eyebrow">KOŞU KOLEKSİYONU</p>
-            <h2>Her adımda daha fazla enerji geri dönüşü</h2>
-            <Link to="/kategori/kosu-ayakkabisi" className="primary-btn">Koşu Modelleri</Link>
+      <DeferredSection minHeight={540}>
+        <section className="container campaign-split">
+          <article>
+            <img src="https://images.unsplash.com/photo-1460353581641-37baddab0fa2?q=80&w=1400&auto=format&fit=crop" alt="Koşu" loading="lazy" decoding="async" fetchPriority="low" />
+            <div>
+              <p className="eyebrow">KOŞU KOLEKSİYONU</p>
+              <h2>Her adımda daha fazla enerji geri dönüşü</h2>
+              <Link to="/kategori/kosu-ayakkabisi" className="primary-btn">Koşu Modelleri</Link>
+            </div>
+          </article>
+          <article>
+            <img src="https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?q=80&w=1400&auto=format&fit=crop" alt="Sport" loading="lazy" decoding="async" fetchPriority="low" />
+            <div>
+              <p className="eyebrow">SPORT STYLE</p>
+              <h2>Sokak stilini performansla birleştir</h2>
+              <Link to="/kategori/spor-ayakkabi" className="primary-btn">Spor Ayakkabılar</Link>
+            </div>
+          </article>
+        </section>
+      </DeferredSection>
+
+      <DeferredSection minHeight={640}>
+        <ProductGridSection title="Yeni Gelenler" subtitle="Bu haftanın yeni eklenen modelleri" products={newest} gridClassName="home-product-grid" />
+      </DeferredSection>
+      <DeferredSection minHeight={640}>
+        <ProductGridSection title="Koşu ve Antrenman" subtitle="Yüksek performans serisi" products={running} gridClassName="home-product-grid" />
+      </DeferredSection>
+
+      <DeferredSection minHeight={300}>
+        <section className="section-block container">
+          <div className="section-head"><h2>Markalar</h2></div>
+          <div className="brand-grid">
+            {brands.map((brand) => <div key={brand} className="brand-card">{brand}</div>)}
           </div>
-        </article>
-        <article>
-          <img src="https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?q=80&w=1400&auto=format&fit=crop" alt="Sport" />
-          <div>
-            <p className="eyebrow">SPORT STYLE</p>
-            <h2>Sokak stilini performansla birleştir</h2>
-            <Link to="/kategori/spor-ayakkabi" className="primary-btn">Spor Ayakkabılar</Link>
+        </section>
+      </DeferredSection>
+
+      <DeferredSection minHeight={220}>
+        <section className="pro-banner">
+          <div className="container pro-banner-inner">
+            <h2>ProSpor Membership</h2>
+            <p>Üyelere özel erken erişim, ekstra indirim ve yeni koleksiyon bildirimleri.</p>
+            <Link to="/giris-kayit" className="secondary-btn">Üye Ol</Link>
           </div>
-        </article>
-      </section>
-
-      <ProductGridSection title="Yeni Gelenler" subtitle="Bu haftanın yeni eklenen modelleri" products={newest} gridClassName="home-product-grid" />
-      <ProductGridSection title="Koşu ve Antrenman" subtitle="Yüksek performans serisi" products={running} gridClassName="home-product-grid" />
-
-      <section className="section-block container">
-        <div className="section-head"><h2>Markalar</h2></div>
-        <div className="brand-grid">
-          {brands.map((brand) => <div key={brand} className="brand-card">{brand}</div>)}
-        </div>
-      </section>
-
-      <section className="pro-banner">
-        <div className="container pro-banner-inner">
-          <h2>ProSpor Membership</h2>
-          <p>Üyelere özel erken erişim, ekstra indirim ve yeni koleksiyon bildirimleri.</p>
-          <Link to="/giris-kayit" className="secondary-btn">Üye Ol</Link>
-        </div>
-      </section>
+        </section>
+      </DeferredSection>
     </div>
   );
 }

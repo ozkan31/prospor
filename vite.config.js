@@ -1,11 +1,6 @@
 ﻿import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const envAllowedHosts = (process.env.VITE_ALLOWED_HOSTS || "")
-  .split(",")
-  .map((h) => h.trim())
-  .filter(Boolean);
-
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -20,25 +15,11 @@ export default defineConfig({
         changeOrigin: true
       }
     },
-    allowedHosts: [
-      "prospor07.com",
-      "www.prospor07.com",
-      "localhost",
-      "127.0.0.1",
-      ".ngrok-free.app",
-      ".ngrok-free.dev",
-      "ok-faultier-izetta.ngrok-free.dev",
-      ".ngrok.io",
-      ...envAllowedHosts
-    ]
+    allowedHosts: "all"
   },
   preview: {
     host: "0.0.0.0",
     port: 4173,
-    allowedHosts: [
-      "prospor07.com",
-      "www.prospor07.com",
-      ...envAllowedHosts
-    ]
+    allowedHosts: "all"
   },
 });

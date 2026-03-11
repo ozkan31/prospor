@@ -59,7 +59,7 @@ export default function ProductCard({ product, onQuickView }) {
         >
           {isFav ? "♥" : "♡"}
         </button>
-        <img src={product.image} alt={product.name} loading="lazy" className="product-image" />
+        <img src={product.image} alt={product.name} loading="lazy" decoding="async" fetchPriority="low" className="product-image" />
         {discount > 0 && <span className="badge">%{discount}</span>}
       </Link>
 
