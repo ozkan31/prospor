@@ -9,7 +9,7 @@ const envAllowedHosts = (process.env.VITE_ALLOWED_HOSTS || "")
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: true,
+    host: "0.0.0.0",
     proxy: {
       "/api": {
         target: "http://localhost:3001",
@@ -21,6 +21,8 @@ export default defineConfig({
       }
     },
     allowedHosts: [
+      "prospor07.com",
+      "www.prospor07.com",
       "localhost",
       "127.0.0.1",
       ".ngrok-free.app",
@@ -29,5 +31,14 @@ export default defineConfig({
       ".ngrok.io",
       ...envAllowedHosts
     ]
-  }
+  },
+  preview: {
+    host: "0.0.0.0",
+    port: 4173,
+    allowedHosts: [
+      "prospor07.com",
+      "www.prospor07.com",
+      ...envAllowedHosts
+    ]
+  },
 });
