@@ -3,13 +3,14 @@ import { Link, useNavigate } from "react-router-dom";
 import RatingStars from "./RatingStars";
 import { useStore } from "../context/StoreContext";
 
-export default function ProductCard({ product, onQuickView }) {
+export default function ProductCard({ product, onQuickView, priority = false }) {
   const navigate = useNavigate();
   const { favorites, toggleFavorite, user, addToCart } = useStore();
   const [addedToCart, setAddedToCart] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedSize, setSelectedSize] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
+  const [imgReady, setImgReady] = useState(false);
   const isFav = favorites.includes(product.id);
   const discount = product.oldPrice ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100) : 0;
 
@@ -59,7 +60,17 @@ export default function ProductCard({ product, onQuickView }) {
         >
           {isFav ? "♥" : "♡"}
         </button>
-        <img src={product.image} alt={product.name} loading="lazy" decoding="async" fetchPriority="low" className="product-image" />
+        {!imgReady && <div className="product-image-skeleton" aria-hidden="true" />}
+        <img
+          src={product.image}
+          alt={product.name}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
+          decoding="auto"
+          className={`product-image ${imgReady ? "is-loaded" : ""}`}
+          onLoad={() => setImgReady(true)}
+          onError={() => setImgReady(true)}
+        />
         {discount > 0 && <span className="badge">%{discount}</span>}
       </Link>
 

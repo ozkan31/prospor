@@ -8,8 +8,8 @@ export default function ProductGridSection({ title, subtitle, products, onQuickV
         {subtitle && <p>{subtitle}</p>}
       </div>
       <div className={`product-grid ${gridClassName}`.trim()}>
-        {products.map((product) => (
-          <ProductCard key={product.id} product={product} onQuickView={onQuickView} />
+        {products.map((product, idx) => (
+          <ProductCard key={product.id} product={product} onQuickView={onQuickView} priority={idx < 4} />
         ))}
       </div>
     </section>

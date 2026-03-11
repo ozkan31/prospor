@@ -497,6 +497,14 @@ button, input, select, textarea { font: inherit; }
   overflow: hidden;
   display: block;
   min-height: 230px;
+  background: #f5f7fa;
+}
+.product-image-skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #eef2f6, #dfe6ee, #eef2f6);
+  background-size: 220% 100%;
+  animation: shimmer 1.2s linear infinite;
 }
 .favorite-float-btn {
   position: absolute;
@@ -509,7 +517,14 @@ button, input, select, textarea { font: inherit; }
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.94);
 }
-.product-image { height: 230px; width: 100%; object-fit: cover; }
+.product-image {
+  height: 230px;
+  width: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+.product-image.is-loaded { opacity: 1; }
 .badge {
   position: absolute;
   top: 8px;

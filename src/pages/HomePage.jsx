@@ -124,8 +124,8 @@ export default function HomePage() {
           </div>
           {filteredFromHome.length ? (
             <div className="product-grid home-product-grid">
-              {filteredFromHome.map((p) => (
-                <ProductCard key={p.id} product={p} />
+              {filteredFromHome.map((p, idx) => (
+                <ProductCard key={p.id} product={p} priority={idx < 4} />
               ))}
             </div>
           ) : (
