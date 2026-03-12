@@ -323,6 +323,15 @@ export default function CheckoutPage() {
     await handleCreatePaytrPayment(selected);
   };
 
+  const handleSaveAddressAndContinue = async () => {
+    setFormError("");
+    const selected = await saveAddressIfNeeded();
+    if (!selected) return;
+    if (agreementChecked) {
+      await handleCreatePaytrPayment(selected);
+    }
+  };
+
   const finalizeOrderIfPaid = async (oid) => {
     setSubmittingOrder(true);
     setCurrentStep(3);
@@ -524,8 +533,8 @@ export default function CheckoutPage() {
                         Kayitli Adrese Don
                       </button>
                     )}
-                    <button className="primary-btn" onClick={saveAddressIfNeeded} disabled={savingAddress}>
-                      {savingAddress ? "Kaydediliyor..." : "Adresi Kaydet"}
+                    <button className="primary-btn" onClick={handleSaveAddressAndContinue} disabled={savingAddress || creatingPayment}>
+                      {savingAddress ? "Kaydediliyor..." : "Adresi Kaydet ve Devam Et"}
                     </button>
                   </div>
                 </>
