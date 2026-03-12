@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import Breadcrumb from "../components/Breadcrumb";
 import { useStore } from "../context/StoreContext";
+import { apiRequest } from "../lib/api";
 import { useSEO } from "../hooks/useSEO";
 
 const API_BASE = "https://api.turkiyeapi.dev/v1";
@@ -23,18 +24,10 @@ const formatNeighborhoodName = (value) => {
 };
 
 export default function CheckoutPage() {
-  const {
-    subtotal,
-    cartItems,
-    removeFromCart,
-    user,
-    addresses,
-    saveAddress,
-    placeOrder,
-    isLoggedIn
-  } = useStore();
+  const { token, subtotal, cartItems, user, addresses, saveAddress, placeOrder, isLoggedIn } = useStore();
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [selectedAddressKey, setSelectedAddressKey] = useState(addresses.home ? "home" : addresses.secondary ? "secondary" : "home");
   const savedAddress = addresses[selectedAddressKey] || null;
@@ -50,7 +43,7 @@ export default function CheckoutPage() {
   const [neighborhoods, setNeighborhoods] = useState([]);
 
   const [showNewAddressForm, setShowNewAddressForm] = useState(!savedAddress);
-  const [addressConfirmed, setAddressConfirmed] = useState(!!savedAddress);
+  const [addressConfirmed, setAddressConfirmed] = useState(false);
 
   const [address, setAddress] = useState({
     firstName: savedAddress?.firstName || user?.name?.split(" ")[0] || "",
@@ -66,24 +59,33 @@ export default function CheckoutPage() {
     title: savedAddress?.title || ""
   });
 
-  const [cardHolder, setCardHolder] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvv, setCardCvv] = useState("");
   const [agreementChecked, setAgreementChecked] = useState(false);
+  const [paytrToken, setPaytrToken] = useState("");
+  const [paytrIframeUrl, setPaytrIframeUrl] = useState("");
+  const [merchantOid, setMerchantOid] = useState("");
+  const [creatingPayment, setCreatingPayment] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [paymentResult, setPaymentResult] = useState({ status: "idle", message: "", orderNo: "" });
 
-  const paymentRef = useRef(null);
+  const autoFinalizeRef = useRef(false);
   const addressRef = useRef(null);
 
-  useSEO({ title: "Ödeme", description: "Teslimat, fatura ve ödeme adımlarını tamamlayın." });
+  useSEO({ title: "Odeme", description: "Teslimat, fatura ve odeme adimlarini tamamlayin." });
 
   const shipping = subtotal > 2999 ? 0 : 149;
   const total = subtotal + shipping;
+  const paytrStatus = searchParams.get("paytr");
+  const paytrOid = searchParams.get("oid");
 
   useEffect(() => {
     const selected = addresses[selectedAddressKey] || null;
     setShowNewAddressForm(!selected);
-    setAddressConfirmed(!!selected);
+    setAddressConfirmed(false);
+    setAgreementChecked(false);
+    setPaytrToken("");
+    setPaytrIframeUrl("");
+    setMerchantOid("");
+    setCurrentStep(paytrStatus ? 3 : 1);
     setAddress({
       firstName: selected?.firstName || user?.name?.split(" ")[0] || "",
       lastName: selected?.lastName || user?.name?.split(" ").slice(1).join(" ") || "",
@@ -97,7 +99,7 @@ export default function CheckoutPage() {
       line: selected?.line || "",
       title: selected?.title || ""
     });
-  }, [addresses, selectedAddressKey, user?.name, user?.phone]);
+  }, [addresses, selectedAddressKey, user?.name, user?.phone, paytrStatus]);
 
   useEffect(() => {
     const loadCities = async () => {
@@ -106,29 +108,35 @@ export default function CheckoutPage() {
       try {
         const res = await fetch(`${API_BASE}/provinces?fields=id,name&limit=200`);
         const json = await res.json();
-        const list = pickArray(json).map((item) => ({ id: String(item.id), name: normalizeName(item) })).filter((x) => x.id && x.name);
+        const list = pickArray(json)
+          .map((item) => ({ id: String(item.id), name: normalizeName(item) }))
+          .filter((x) => x.id && x.name);
         setCities(list);
         if (!address.cityId && list.length) {
           setAddress((prev) => ({ ...prev, cityId: list[0].id, cityName: list[0].name }));
         }
       } catch {
-        setAddressDataError("İl verisi yüklenemedi.");
+        setAddressDataError("Il verisi yuklenemedi.");
       } finally {
         setLoadingAddressData(false);
       }
     };
+
     loadCities();
   }, []);
 
   useEffect(() => {
     if (!address.cityId) return;
+
     const loadDistricts = async () => {
       setLoadingAddressData(true);
       setAddressDataError("");
       try {
         const res = await fetch(`${API_BASE}/districts?provinceId=${address.cityId}&fields=id,name&limit=1200`);
         const json = await res.json();
-        const list = pickArray(json).map((item) => ({ id: String(item.id), name: normalizeName(item) })).filter((x) => x.id && x.name);
+        const list = pickArray(json)
+          .map((item) => ({ id: String(item.id), name: normalizeName(item) }))
+          .filter((x) => x.id && x.name);
         setDistricts(list);
         if (!list.some((d) => d.id === address.districtId)) {
           const first = list[0];
@@ -141,16 +149,18 @@ export default function CheckoutPage() {
           }));
         }
       } catch {
-        setAddressDataError("İlçe verisi yüklenemedi.");
+        setAddressDataError("Ilce verisi yuklenemedi.");
       } finally {
         setLoadingAddressData(false);
       }
     };
+
     loadDistricts();
-  }, [address.cityId]);
+  }, [address.cityId, address.districtId]);
 
   useEffect(() => {
     if (!address.districtId) return;
+
     const loadNeighborhoods = async () => {
       setLoadingAddressData(true);
       setAddressDataError("");
@@ -186,6 +196,7 @@ export default function CheckoutPage() {
           if (!uniqMap.has(item.name)) uniqMap.set(item.name, item);
         }
         list = [...uniqMap.values()];
+
         setNeighborhoods(list);
 
         if (!list.some((n) => n.id === address.neighborhoodId)) {
@@ -193,89 +204,177 @@ export default function CheckoutPage() {
           setAddress((prev) => ({ ...prev, neighborhoodId: first?.id || "", neighborhoodName: first?.name || "" }));
         }
       } catch {
-        setAddressDataError("Mahalle verisi yüklenemedi.");
+        setAddressDataError("Mahalle verisi yuklenemedi.");
       } finally {
         setLoadingAddressData(false);
       }
     };
+
     loadNeighborhoods();
   }, [address.districtId, address.cityName, address.districtName, address.neighborhoodId]);
 
   const cartEmpty = useMemo(() => cartItems.length === 0, [cartItems.length]);
 
   const validateAddress = () => {
-    if (!address.firstName || !address.lastName || !address.phone || !address.cityId || !address.districtId || !address.neighborhoodId || !address.line || !address.title) {
-      setFormError("Teslimat adresindeki tüm alanları doldurun.");
+    if (
+      !address.firstName ||
+      !address.lastName ||
+      !address.phone ||
+      !address.cityId ||
+      !address.districtId ||
+      !address.neighborhoodId ||
+      !address.line ||
+      !address.title
+    ) {
+      setFormError("Teslimat adresindeki tum alanlari doldurun.");
       return false;
     }
+
     if (address.phone.length < 10 || address.phone.length > 11) {
-      setFormError("Telefon numarası 10 veya 11 haneli olmalı.");
+      setFormError("Telefon numarasi 10 veya 11 haneli olmali.");
       return false;
     }
+
     if (address.title.trim().length < 10) {
-      setFormError("Adres başlığı en az 10 karakter olmalı.");
+      setFormError("Adres basligi en az 10 karakter olmali.");
       return false;
     }
+
     return true;
   };
 
-  const handleSaveAddressAndContinue = async () => {
-    setFormError("");
+  const saveAddressIfNeeded = async () => {
+    if (!showNewAddressForm) {
+      if (!savedAddress) {
+        setFormError("Bir teslimat adresi secin.");
+        return null;
+      }
+      return savedAddress;
+    }
+
     if (!validateAddress()) {
       addressRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
+      return null;
     }
 
     setSavingAddress(true);
     try {
-      await saveAddress(selectedAddressKey, address);
+      const saved = await saveAddress(selectedAddressKey, address);
       setAddressConfirmed(true);
       setShowNewAddressForm(false);
-      setTimeout(() => paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      return saved;
     } catch (error) {
       setFormError(error.message || "Adres kaydedilemedi.");
+      return null;
     } finally {
       setSavingAddress(false);
     }
   };
 
-  const handleConfirmOrder = async () => {
+  const handleCreatePaytrPayment = async (selectedAddress) => {
+    setCreatingPayment(true);
+    setFormError("");
+
+    try {
+      const json = await apiRequest(
+        "/paytr/token",
+        {
+          method: "POST",
+          body: JSON.stringify({ address: selectedAddress })
+        },
+        token
+      );
+
+      if (!json?.token || !json?.iframeUrl || !json?.merchantOid) {
+        throw new Error("PAYTR token yaniti gecersiz.");
+      }
+
+      setPaytrToken(json.token);
+      setPaytrIframeUrl(json.iframeUrl);
+      setMerchantOid(json.merchantOid);
+      setCurrentStep(2);
+      return true;
+    } catch (error) {
+      setCurrentStep(1);
+      setFormError(error.message || "PAYTR odemesi baslatilamadi.");
+      return false;
+    } finally {
+      setCreatingPayment(false);
+    }
+  };
+
+  const handleProceedToPayment = async () => {
     setFormError("");
 
     if (cartEmpty) {
-      setFormError("Sepette ürün kalmadı.");
+      setFormError("Sepette urun kalmadi.");
       navigate("/sepet");
       return;
     }
 
-    if (!addressConfirmed) {
-      setFormError("Önce teslimat adresini tamamlayın.");
-      addressRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
-    if (!cardHolder.trim() || cardNumber.length !== 16 || cardExpiry.length !== 5 || cardCvv.length !== 3) {
-      setFormError("Kart bilgilerini eksiksiz doldurun.");
-      paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
     if (!agreementChecked) {
-      setFormError("Sözleşme onayı vermeden devam edemezsiniz.");
-      paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setFormError("Sozlesme onayi vermeden devam edemezsiniz.");
       return;
     }
 
+    const selected = await saveAddressIfNeeded();
+    if (!selected) return;
+
+    await handleCreatePaytrPayment(selected);
+  };
+
+  const finalizeOrderIfPaid = async (oid) => {
     setSubmittingOrder(true);
+    setCurrentStep(3);
+    setPaymentResult({ status: "pending", message: "Odeme dogrulaniyor...", orderNo: "" });
+
     try {
-      await placeOrder(addresses[selectedAddressKey] || address);
-      navigate("/odeme/basarili");
+      let statusJson = null;
+      for (let i = 0; i < 8; i += 1) {
+        statusJson = await apiRequest(`/paytr/status/${oid}`, {}, token);
+        if (statusJson?.status === "paid") break;
+        if (statusJson?.status === "failed") break;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      if (statusJson?.status !== "paid") {
+        autoFinalizeRef.current = false;
+        setPaymentResult({
+          status: "failed",
+          message: "Odeme onayi henuz gelmedi. 5-10 saniye sonra sayfayi yenileyin.",
+          orderNo: ""
+        });
+        return;
+      }
+
+      const order = await placeOrder(addresses[selectedAddressKey] || address);
+      setPaymentResult({
+        status: "success",
+        message: "Odemeniz onaylandi ve siparisiniz olusturuldu.",
+        orderNo: order?.orderNo || ""
+      });
     } catch (error) {
-      setFormError(error.message || "Sipariş oluşturulamadı.");
+      setPaymentResult({ status: "failed", message: error.message || "Siparis olusturulamadi.", orderNo: "" });
     } finally {
       setSubmittingOrder(false);
     }
   };
+
+  useEffect(() => {
+    if (!paytrStatus) return;
+
+    if (paytrStatus === "fail") {
+      setCurrentStep(3);
+      setPaymentResult({ status: "failed", message: "Odeme basarisiz veya iptal edildi.", orderNo: "" });
+      return;
+    }
+
+    if (paytrStatus === "ok" && paytrOid && !autoFinalizeRef.current) {
+      autoFinalizeRef.current = true;
+      setMerchantOid(paytrOid);
+      finalizeOrderIfPaid(paytrOid);
+    }
+  }, [paytrStatus, paytrOid]);
 
   if (!isLoggedIn) {
     return <Navigate to="/giris-kayit" replace />;
@@ -283,180 +382,230 @@ export default function CheckoutPage() {
 
   return (
     <div className="container page-pad">
-      <Breadcrumb items={[{ label: "Anasayfa", to: "/" }, { label: "Sepet", to: "/sepet" }, { label: "Ödeme" }]} />
-      <h1>Ödeme</h1>
+      <Breadcrumb items={[{ label: "Anasayfa", to: "/" }, { label: "Sepet", to: "/sepet" }, { label: "Odeme" }]} />
+      <h1>Odeme</h1>
       <div className="checkout-steps">
-        <span className="active">1. Teslimat</span>
-        <span className={addressConfirmed ? "active" : ""}>2. Ödeme</span>
-        <span>3. Tamamlandı</span>
+        <span className={currentStep >= 1 ? "active" : ""}>1. Teslimat</span>
+        <span className={currentStep >= 2 ? "active" : ""}>2. Odeme</span>
+        <span className={currentStep >= 3 ? "active" : ""}>3. Sonuc</span>
       </div>
 
       <div className="checkout-layout">
         <section className="form-card">
-          <div ref={addressRef}>
-            <h3>Teslimat Adresi</h3>
-            <div className="checkout-address-switch">
-              <button
-                type="button"
-                className={selectedAddressKey === "home" ? "primary-btn" : "secondary-btn"}
-                onClick={() => setSelectedAddressKey("home")}
-              >
-                Adres 1
-              </button>
-              <button
-                type="button"
-                className={selectedAddressKey === "secondary" ? "primary-btn" : "secondary-btn"}
-                onClick={() => setSelectedAddressKey("secondary")}
-              >
-                Adres 2
-              </button>
-            </div>
-
-            {savedAddress && !showNewAddressForm && (
-              <div className="saved-address-box">
-                <p><strong>{savedAddress.firstName} {savedAddress.lastName}</strong></p>
-                <p>{savedAddress.phone}</p>
-                <p>{savedAddress.cityName} / {savedAddress.districtName} / {savedAddress.neighborhoodName}</p>
-                <p>{savedAddress.line}</p>
-                <p><strong>{savedAddress.title}</strong></p>
-                <div className="checkout-address-actions">
-                  <button className="secondary-btn" onClick={() => setShowNewAddressForm(true)}>Yeni Adres Ekle</button>
-                  <button className="primary-btn" onClick={() => {
-                    setAddressConfirmed(true);
-                    setTimeout(() => paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-                  }}>
-                    Bu Adresle Devam Et
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {showNewAddressForm && (
-              <>
-                <div className="form-grid checkout-name-row">
-                  <input placeholder="Ad" value={address.firstName} onChange={(e) => setAddress((p) => ({ ...p, firstName: e.target.value }))} />
-                  <input placeholder="Soyad" value={address.lastName} onChange={(e) => setAddress((p) => ({ ...p, lastName: e.target.value }))} />
-                </div>
-
-                <div className="form-grid">
-                  <input
-                    className="full"
-                    placeholder="Telefon"
-                    inputMode="numeric"
-                    value={address.phone}
-                    onChange={(e) => setAddress((p) => ({ ...p, phone: e.target.value.replace(/\D/g, "").slice(0, 11) }))}
-                  />
-                </div>
-
-                <div className="form-grid checkout-location-row">
-                  <select
-                    value={address.cityId}
-                    onChange={(e) => {
-                      const selected = cities.find((c) => c.id === e.target.value);
-                      setAddress((prev) => ({ ...prev, cityId: e.target.value, cityName: selected?.name || "" }));
-                    }}
-                  >
-                    {cities.map((city) => (
-                      <option key={city.id} value={city.id}>{city.name}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={address.districtId}
-                    onChange={(e) => {
-                      const selected = districts.find((d) => d.id === e.target.value);
-                      setAddress((prev) => ({ ...prev, districtId: e.target.value, districtName: selected?.name || "" }));
-                    }}
-                  >
-                    {districts.map((district) => (
-                      <option key={district.id} value={district.id}>{district.name}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={address.neighborhoodId}
-                    onChange={(e) => {
-                      const selected = neighborhoods.find((n) => n.id === e.target.value);
-                      setAddress((prev) => ({ ...prev, neighborhoodId: e.target.value, neighborhoodName: selected?.name || "" }));
-                    }}
-                  >
-                    {!neighborhoods.length && <option value="">Mahalle bulunamadı</option>}
-                    {neighborhoods.map((n) => (
-                      <option key={n.id} value={n.id}>{n.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-grid">
-                  <input className="full" placeholder="Açık Adres" value={address.line} onChange={(e) => setAddress((p) => ({ ...p, line: e.target.value }))} />
-                  <input className="full" placeholder="Adres Başlığı (min. 10 karakter)" value={address.title} onChange={(e) => setAddress((p) => ({ ...p, title: e.target.value }))} />
-                </div>
-
-                <div className="checkout-address-actions">
-                  {savedAddress && (
-                    <button className="secondary-btn" onClick={() => setShowNewAddressForm(false)}>Kayıtlı Adrese Dön</button>
-                  )}
-                  <button className="primary-btn" onClick={handleSaveAddressAndContinue} disabled={savingAddress}>
-                    {savingAddress ? "Kaydediliyor..." : "Adresi Kaydet ve Devam Et"}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {loadingAddressData && <p className="muted">İl/ilçe/mahalle verileri yükleniyor...</p>}
-            {addressDataError && <p className="form-error">{addressDataError}</p>}
-          </div>
-
-          {addressConfirmed && (
-            <div ref={paymentRef}>
-              <h3>Güvenli Ödeme</h3>
-              <div className="payment-gateway-card">
-                <strong>Banka/Kredi Kartı ile Öde</strong>
-                <span>Visa, Mastercard, Troy</span>
+          {currentStep === 1 && (
+            <div ref={addressRef}>
+              <h3>Teslimat Adresi</h3>
+              <div className="checkout-address-switch">
+                <button
+                  type="button"
+                  className={selectedAddressKey === "home" ? "primary-btn" : "secondary-btn"}
+                  onClick={() => setSelectedAddressKey("home")}
+                >
+                  Adres 1
+                </button>
+                <button
+                  type="button"
+                  className={selectedAddressKey === "secondary" ? "primary-btn" : "secondary-btn"}
+                  onClick={() => setSelectedAddressKey("secondary")}
+                >
+                  Adres 2
+                </button>
               </div>
 
-              <div className="card-payment-form">
-                <div className="form-grid">
-                  <input className="full" placeholder="Kart Üzerindeki İsim" value={cardHolder} onChange={(e) => setCardHolder(e.target.value)} />
-                  <input className="full" placeholder="Kart Numarası" inputMode="numeric" value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, "").slice(0, 16))} />
-                  <input
-                    placeholder="AA/YY"
-                    inputMode="numeric"
-                    value={cardExpiry}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
-                      setCardExpiry(digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits);
-                    }}
-                  />
-                  <input placeholder="CVV" inputMode="numeric" value={cardCvv} onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, "").slice(0, 3))} />
+              {savedAddress && !showNewAddressForm && (
+                <div className="saved-address-box">
+                  <p>
+                    <strong>
+                      {savedAddress.firstName} {savedAddress.lastName}
+                    </strong>
+                  </p>
+                  <p>{savedAddress.phone}</p>
+                  <p>
+                    {savedAddress.cityName} / {savedAddress.districtName} / {savedAddress.neighborhoodName}
+                  </p>
+                  <p>{savedAddress.line}</p>
+                  <p>
+                    <strong>{savedAddress.title}</strong>
+                  </p>
+                  <div className="checkout-address-actions">
+                    <button className="secondary-btn" onClick={() => setShowNewAddressForm(true)}>
+                      Yeni Adres Ekle
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="installment-row">
-                <strong>Taksit</strong>
-                <span>Tek Çekim</span>
-              </div>
+              {showNewAddressForm && (
+                <>
+                  <div className="form-grid checkout-name-row">
+                    <input
+                      placeholder="Ad"
+                      value={address.firstName}
+                      onChange={(e) => setAddress((p) => ({ ...p, firstName: e.target.value }))}
+                    />
+                    <input
+                      placeholder="Soyad"
+                      value={address.lastName}
+                      onChange={(e) => setAddress((p) => ({ ...p, lastName: e.target.value }))}
+                    />
+                  </div>
 
-              <label className="agreement-box">
+                  <div className="form-grid">
+                    <input
+                      className="full"
+                      placeholder="Telefon"
+                      inputMode="numeric"
+                      value={address.phone}
+                      onChange={(e) => setAddress((p) => ({ ...p, phone: e.target.value.replace(/\D/g, "").slice(0, 11) }))}
+                    />
+                  </div>
+
+                  <div className="form-grid checkout-location-row">
+                    <select
+                      value={address.cityId}
+                      onChange={(e) => {
+                        const selected = cities.find((c) => c.id === e.target.value);
+                        setAddress((prev) => ({ ...prev, cityId: e.target.value, cityName: selected?.name || "" }));
+                      }}
+                    >
+                      {cities.map((city) => (
+                        <option key={city.id} value={city.id}>
+                          {city.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={address.districtId}
+                      onChange={(e) => {
+                        const selected = districts.find((d) => d.id === e.target.value);
+                        setAddress((prev) => ({ ...prev, districtId: e.target.value, districtName: selected?.name || "" }));
+                      }}
+                    >
+                      {districts.map((district) => (
+                        <option key={district.id} value={district.id}>
+                          {district.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={address.neighborhoodId}
+                      onChange={(e) => {
+                        const selected = neighborhoods.find((n) => n.id === e.target.value);
+                        setAddress((prev) => ({ ...prev, neighborhoodId: e.target.value, neighborhoodName: selected?.name || "" }));
+                      }}
+                    >
+                      {!neighborhoods.length && <option value="">Mahalle bulunamadi</option>}
+                      {neighborhoods.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-grid">
+                    <input
+                      className="full"
+                      placeholder="Acik Adres"
+                      value={address.line}
+                      onChange={(e) => setAddress((p) => ({ ...p, line: e.target.value }))}
+                    />
+                    <input
+                      className="full"
+                      placeholder="Adres Basligi (min. 10 karakter)"
+                      value={address.title}
+                      onChange={(e) => setAddress((p) => ({ ...p, title: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="checkout-address-actions">
+                    {savedAddress && (
+                      <button className="secondary-btn" onClick={() => setShowNewAddressForm(false)}>
+                        Kayitli Adrese Don
+                      </button>
+                    )}
+                    <button className="primary-btn" onClick={saveAddressIfNeeded} disabled={savingAddress}>
+                      {savingAddress ? "Kaydediliyor..." : "Adresi Kaydet"}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <label className="agreement-box" style={{ marginTop: 14 }}>
                 <input type="checkbox" checked={agreementChecked} onChange={(e) => setAgreementChecked(e.target.checked)} />
                 <span>
-                  <Link to="/kullanim-kosullari">Ön Bilgilendirme Koşulları</Link> ve{" "}
-                  <Link to="/mesafeli-satis-sozlesmesi">Mesafeli Satış Sözleşmesi</Link>'ni okudum, onaylıyorum.
+                  <Link to="/kullanim-kosullari">On Bilgilendirme Kosullari</Link> ve{" "}
+                  <Link to="/mesafeli-satis-sozlesmesi">Mesafeli Satis Sozlesmesi</Link>'ni okudum, onayliyorum.
                 </span>
               </label>
+
+              <button className="primary-btn block" onClick={handleProceedToPayment} disabled={creatingPayment || savingAddress}>
+                {creatingPayment ? "PAYTR formu hazirlaniyor..." : "Odemeye Gec"}
+              </button>
+
+              {loadingAddressData && <p className="muted">Il/ilce/mahalle verileri yukleniyor...</p>}
+              {addressDataError && <p className="form-error">{addressDataError}</p>}
+            </div>
+          )}
+
+          {currentStep === 2 && (
+            <div>
+              <h3>Odeme Formu</h3>
+              {!paytrIframeUrl && <p className="muted">PAYTR iframe yukleniyor...</p>}
+              {paytrIframeUrl && (
+                <div className="card-payment-form">
+                  <iframe
+                    title="PAYTR Odeme"
+                    src={paytrIframeUrl}
+                    style={{ width: "100%", minHeight: 620, border: "1px solid #e5e7eb", borderRadius: 12, background: "#fff" }}
+                    allow="payment"
+                  />
+                  <div className="installment-row">
+                    <strong>Odeme Kaydi</strong>
+                    <span>{merchantOid || paytrToken.slice(0, 12)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {currentStep === 3 && (
+            <div>
+              <h3>Odeme Sonucu</h3>
+              {paymentResult.status === "pending" && <p className="muted">{paymentResult.message}</p>}
+              {paymentResult.status === "success" && (
+                <div className="saved-address-box">
+                  <p>
+                    <strong>Odeme basarili.</strong>
+                  </p>
+                  <p>{paymentResult.message}</p>
+                  {paymentResult.orderNo && <p>Siparis No: {paymentResult.orderNo}</p>}
+                  <button className="primary-btn" onClick={() => navigate("/hesabim?siparisler=1")}>Siparislerime Git</button>
+                </div>
+              )}
+              {paymentResult.status === "failed" && (
+                <div className="saved-address-box">
+                  <p>
+                    <strong>Odeme tamamlanamadi.</strong>
+                  </p>
+                  <p>{paymentResult.message}</p>
+                  <button className="primary-btn" onClick={() => navigate("/odeme")}>Tekrar Dene</button>
+                </div>
+              )}
+              {!paymentResult.status || paymentResult.status === "idle" ? <p className="muted">Sonuc bekleniyor...</p> : null}
             </div>
           )}
 
           {formError && <p className="form-error">{formError}</p>}
-          <button className="primary-btn block" onClick={handleConfirmOrder} disabled={submittingOrder}>
-            {submittingOrder ? "Sipariş oluşturuluyor..." : "Onayla ve Bitir"}
-          </button>
+          {submittingOrder && <p className="muted">Siparis olusturuluyor...</p>}
         </section>
 
         <aside className="summary-box">
-          <h3>Sipariş Özeti</h3>
+          <h3>Siparis Ozeti</h3>
           <div className="checkout-product-strip">
             {cartItems.map((line, i) => (
               <Link key={`${line.product?.id || "p"}-${i}`} className="checkout-product-item" to={`/urun/${line.product?.id || ""}`}>
-                <img src={line.product?.image} alt={line.product?.name || "Ürün"} loading="lazy" />
+                <img src={line.product?.image} alt={line.product?.name || "Urun"} loading="lazy" />
                 <span>{line.qty}x</span>
               </Link>
             ))}
@@ -467,13 +616,18 @@ export default function CheckoutPage() {
               <Link className="checkout-summary-link" to={`/urun/${line.product?.id || ""}`}>
                 {line.product?.name} x {line.qty}
               </Link>
-              <button className="link-btn checkout-remove-btn" onClick={() => removeFromCart(i)}>Kaldır</button>
             </div>
           ))}
 
-          <p>Ara Toplam <strong>{subtotal.toLocaleString("tr-TR")} TL</strong></p>
-          <p>Kargo <strong>{shipping === 0 ? "Ücretsiz" : `${shipping} TL`}</strong></p>
-          <p className="summary-total">Toplam <strong>{total.toLocaleString("tr-TR")} TL</strong></p>
+          <p>
+            Ara Toplam <strong>{subtotal.toLocaleString("tr-TR")} TL</strong>
+          </p>
+          <p>
+            Kargo <strong>{shipping === 0 ? "Ucretsiz" : `${shipping} TL`}</strong>
+          </p>
+          <p className="summary-total">
+            Toplam <strong>{total.toLocaleString("tr-TR")} TL</strong>
+          </p>
         </aside>
       </div>
     </div>

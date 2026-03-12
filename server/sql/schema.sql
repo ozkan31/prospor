@@ -127,3 +127,24 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   KEY idx_reset_expires (expires_at),
   CONSTRAINT fk_reset_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS paytr_transactions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  merchant_oid VARCHAR(120) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  email VARCHAR(190) NOT NULL,
+  total_amount DECIMAL(10,2) NOT NULL,
+  payment_amount INT NOT NULL,
+  status ENUM('pending', 'paid', 'failed') NOT NULL DEFAULT 'pending',
+  address_json LONGTEXT NULL,
+  callback_payload LONGTEXT NULL,
+  last_error TEXT NULL,
+  paid_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_paytr_oid (merchant_oid),
+  KEY idx_paytr_user (user_id),
+  KEY idx_paytr_status (status),
+  CONSTRAINT fk_paytr_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

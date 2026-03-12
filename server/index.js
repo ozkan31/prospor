@@ -11,11 +11,13 @@ import favoritesRoutes from "./routes/favorites.js";
 import ordersRoutes from "./routes/orders.js";
 import addressesRoutes from "./routes/addresses.js";
 import adminRoutes from "./routes/admin.js";
+import paytrRoutes from "./routes/paytr.js";
 
 const app = express();
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
 app.get("/api/health", async (_req, res) => {
@@ -35,6 +37,7 @@ app.use("/api/favorites", favoritesRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/addresses", addressesRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/paytr", paytrRoutes);
 
 app.use((_req, res) => {
   return res.status(404).json({ message: "Endpoint bulunamadı." });

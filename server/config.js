@@ -30,6 +30,21 @@ export const config = {
     fromName: String(process.env.SMTP_FROM_NAME || "ProSpor").trim(),
     fromEmail: String(process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || "").trim()
   },
+  paytr: {
+    merchantId: String(process.env.PAYTR_MERCHANT_ID || "").trim(),
+    merchantKey: String(process.env.PAYTR_MERCHANT_KEY || "").trim(),
+    merchantSalt: String(process.env.PAYTR_MERCHANT_SALT || "").trim(),
+    testMode: Number(process.env.PAYTR_TEST_MODE || 1),
+    debugOn: Number(process.env.PAYTR_DEBUG_ON || 1),
+    noInstallment: Number(process.env.PAYTR_NO_INSTALLMENT || 0),
+    maxInstallment: Number(process.env.PAYTR_MAX_INSTALLMENT || 0),
+    timeoutLimit: Number(process.env.PAYTR_TIMEOUT_LIMIT || 30),
+    currency: String(process.env.PAYTR_CURRENCY || "TL").trim(),
+    lang: String(process.env.PAYTR_LANG || "tr").trim(),
+    callbackUrl: String(process.env.PAYTR_CALLBACK_URL || "").trim(),
+    okUrl: String(process.env.PAYTR_OK_URL || "https://prospor07.com/odeme?paytr=ok").trim(),
+    failUrl: String(process.env.PAYTR_FAIL_URL || "https://prospor07.com/odeme?paytr=fail").trim()
+  },
   adminEmail: String(process.env.ADMIN_EMAIL || "").trim().toLowerCase(),
   adminPassword: String(process.env.ADMIN_PASSWORD || ""),
   db: {
