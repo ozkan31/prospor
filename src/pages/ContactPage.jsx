@@ -1,8 +1,8 @@
-import Breadcrumb from "../components/Breadcrumb";
+﻿import Breadcrumb from "../components/Breadcrumb";
 import { useSEO } from "../hooks/useSEO";
 
 export default function ContactPage() {
-  useSEO({ title: "İletişim", description: "ProSpor müşteri hizmetleri ve iletişim formu" });
+  useSEO({ title: "İletişim", description: "ProSpor müşteri hizmetleri ve iletişim kanalları" });
 
   return (
     <div className="container page-pad">
@@ -21,12 +21,16 @@ export default function ContactPage() {
         </section>
         <aside className="summary-box">
           <h3>İletişim Bilgileri</h3>
-          <p>Telefon: +90 850 123 45 67</p>
-          <p>E-posta: destek@prospor.com</p>
-          <p>Adres: Maslak Mah. Spor Cad. No:7 Sarıyer / İstanbul</p>
-          <p>Canlı destek: 09:00 - 22:00</p>
+          <p>Telefon: 0531 823 30 74</p>
+          <p>E-posta: destek@prospor07.com</p>
+          <p>Adres: Antalya Kumluca bağlık mahallesi İpek Sokak Gökmen apartmanı kat 1 daire 2</p>
+          <p>Canlı destek: Hafta içi 09:00 - 22:00</p>
+          <p>Destek ekibimiz sipariş, kargo, iade/değişim ve ürün danışmanlığı konularında yardımcı olur.</p>
+          <p>Ödeme altyapımız, uluslararası güvenlik standartlarına uygun şekilde çalışır ve işlem doğrulama adımları ödeme sırasında otomatik olarak uygulanır.</p>
+          <p>Talep ve şikayetleriniz kayıt altına alınır, çözüm süreci boyunca tarafınıza e-posta veya telefon ile bilgilendirme yapılır.</p>
         </aside>
       </div>
     </div>
   );
 }
+

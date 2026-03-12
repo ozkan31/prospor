@@ -48,10 +48,6 @@ export default function AccountPage() {
   const navigate = useNavigate();
   const [now, setNow] = useState(() => new Date());
 
-  if (!isLoggedIn) {
-    return <Navigate to="/giris-kayit" replace />;
-  }
-
   const [selectedAddressKey, setSelectedAddressKey] = useState(addresses.home ? "home" : addresses.secondary ? "secondary" : "home");
   const savedAddress = addresses[selectedAddressKey] || null;
 
@@ -299,6 +295,10 @@ export default function AccountPage() {
 
   const firstName = user?.firstName?.trim() || user?.name?.trim().split(" ")[0] || "";
   const greetingText = firstName ? `${getGreetingText(now)} ${firstName}` : getGreetingText(now);
+
+  if (!isLoggedIn) {
+    return <Navigate to="/giris-kayit" replace />;
+  }
 
   return (
     <div className="container page-pad">

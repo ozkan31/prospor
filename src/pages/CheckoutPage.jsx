@@ -36,10 +36,6 @@ export default function CheckoutPage() {
 
   const navigate = useNavigate();
 
-  if (!isLoggedIn) {
-    return <Navigate to="/giris-kayit" replace />;
-  }
-
   const [selectedAddressKey, setSelectedAddressKey] = useState(addresses.home ? "home" : addresses.secondary ? "secondary" : "home");
   const savedAddress = addresses[selectedAddressKey] || null;
 
@@ -280,6 +276,10 @@ export default function CheckoutPage() {
       setSubmittingOrder(false);
     }
   };
+
+  if (!isLoggedIn) {
+    return <Navigate to="/giris-kayit" replace />;
+  }
 
   return (
     <div className="container page-pad">

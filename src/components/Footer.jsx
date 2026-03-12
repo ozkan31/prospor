@@ -17,6 +17,9 @@ export default function Footer() {
           <Link to="/kargo-ve-teslimat">Kargo ve Teslimat</Link>
           <Link to="/iade-ve-degisim">İade ve Değişim</Link>
           <Link to="/sss">Sık Sorulan Sorular</Link>
+          <p><strong>E-posta:</strong> destek@prospor07.com</p>
+          <p><strong>Telefon:</strong> 0531 823 30 74</p>
+          <p><strong>Adres:</strong> Antalya Kumluca bağlık mahallesi İpek Sokak Gökmen apartmanı kat 1 daire 2</p>
         </div>
         <div>
           <h4>Şirket</h4>
@@ -33,9 +36,10 @@ export default function Footer() {
       </div>
 
       <div className="container nike-footer-bottom">
-        <p>Türkiye</p>
+        <p>Destek: destek@prospor07.com | 0531 823 30 74 | Antalya Kumluca bağlık mahallesi İpek Sokak Gökmen apartmanı kat 1 daire 2</p>
         <p>© 2026 ProSpor, Inc. Tüm hakları saklıdır.</p>
       </div>
     </footer>
   );
 }
+

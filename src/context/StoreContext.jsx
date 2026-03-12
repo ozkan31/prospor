@@ -195,6 +195,22 @@ export function StoreProvider({ children }) {
     return json.user;
   };
 
+  const loginWithGoogle = async (credential) => {
+    const json = await apiRequest("/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential })
+    });
+
+    await syncGuestCartToServer(json.token);
+    setUser(json.user);
+    await loadUserData(json.token);
+
+    localStorage.setItem(TOKEN_KEY, json.token);
+    skipNextBootstrapRef.current = true;
+    setToken(json.token);
+    return json.user;
+  };
+
   const setProfile = async (profile) => {
     const firstName = String(profile.firstName || profile.name?.split(" ")[0] || "").trim();
     const lastName = String(profile.lastName || profile.name?.split(" ").slice(1).join(" ") || "").trim();
@@ -414,6 +430,7 @@ export function StoreProvider({ children }) {
         subtotal,
         login,
         register,
+        loginWithGoogle,
         setProfile,
         logout,
         addToCart,

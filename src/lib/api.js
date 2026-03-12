@@ -3,6 +3,9 @@ const API_BASE = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 const getErrorMessage = async (response) => {
   try {
     const json = await response.json();
+    if (json?.message && json?.error) {
+      return `${json.message} (${json.error})`;
+    }
     return json?.message || `HTTP ${response.status}`;
   } catch {
     return `HTTP ${response.status}`;

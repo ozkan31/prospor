@@ -893,6 +893,55 @@ button, input, select, textarea { font: inherit; }
   justify-content: center;
   min-width: 0;
 }
+.auth-divider {
+  position: relative;
+  text-align: center;
+  margin: 2px 0;
+}
+.auth-divider::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid var(--line);
+}
+.auth-divider span {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  padding: 0 10px;
+  background: #fff;
+  color: #8b95a5;
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.google-auth-btn {
+  width: 100%;
+  border: 1px solid #d8dee8;
+  border-radius: 12px;
+  background: #fff;
+  color: #202124;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.google-auth-btn:hover { background: #f8fafd; }
+.google-auth-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.google-auth-wrap > div {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
 
 .account-layout { grid-template-columns: 260px 1fr; }
 .account-heading {

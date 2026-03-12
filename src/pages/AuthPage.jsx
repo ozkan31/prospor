@@ -1,24 +1,11 @@
-﻿import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+﻿import { useEffect, useRef, useState } from "react";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import Breadcrumb from "../components/Breadcrumb";
 import { useStore } from "../context/StoreContext";
+import { apiRequest } from "../lib/api";
 import { useSEO } from "../hooks/useSEO";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
-
-const decodeJwt = (token) => {
-  try {
-    const payload = token.split(".")[1];
-    return JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-  } catch {
-    return null;
-  }
-};
-
-const isValidGmail = (value) => {
-  const v = String(value || "").trim().toLowerCase();
-  return /^[a-z0-9._%+-]+@gmail\.com$/.test(v);
-};
 
 export default function AuthPage() {
   const [mode, setMode] = useState("login");
@@ -29,55 +16,88 @@ export default function AuthPage() {
   const [passwordAgain, setPasswordAgain] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordAgain, setShowPasswordAgain] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetPasswordAgain, setResetPasswordAgain] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const googleBtnRef = useRef(null);
 
-  const { login, register, isLoggedIn } = useStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const resetToken = String(searchParams.get("resetToken") || "").trim();
+
+  const { login, register, loginWithGoogle, isLoggedIn } = useStore();
   const navigate = useNavigate();
 
   useSEO({ title: "Giriş / Kayıt", description: "ProSpor hesabınıza giriş yapın veya yeni hesap oluşturun." });
-
-  if (isLoggedIn) {
-    return <Navigate to="/hesabim" replace />;
-  }
 
   const clearMessages = () => {
     setError("");
     setSuccess("");
   };
 
-  const handleGooglePrompt = () => {
-    if (!GOOGLE_CLIENT_ID) {
-      setError("Google girişi için VITE_GOOGLE_CLIENT_ID tanımlaman gerekiyor.");
-      return;
-    }
+  useEffect(() => {
+    let cancelled = false;
+    let attempts = 0;
 
-    if (!window.google?.accounts?.id) {
-      setError("Google kimlik servisi yüklenemedi.");
-      return;
-    }
+    const renderGoogleButton = () => {
+      if (cancelled || resetToken || forgotOpen) return;
+      if (!GOOGLE_CLIENT_ID || !googleBtnRef.current) return;
 
-    window.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: (response) => {
-        const data = decodeJwt(response.credential);
-        if (!data) return;
-        setFirstName(data.given_name || "");
-        setLastName(data.family_name || "");
-        setEmail(data.email || "");
+      const googleId = window.google?.accounts?.id;
+      if (!googleId) {
+        attempts += 1;
+        if (attempts < 20) setTimeout(renderGoogleButton, 200);
+        return;
       }
-    });
 
-    setError("");
-    window.google.accounts.id.prompt();
-  };
+      googleId.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response) => {
+          try {
+            clearMessages();
+            setSubmitting(true);
+            if (!response?.credential) {
+              setError("Google kimlik doğrulama bilgisi alınamadı.");
+              return;
+            }
+
+            await loginWithGoogle(response.credential);
+            setSuccess("Google ile giriş başarılı. Yönlendiriliyorsunuz...");
+            setTimeout(() => navigate("/hesabim"), 400);
+          } catch (e) {
+            setError(e.message || "Google ile giriş başarısız.");
+          } finally {
+            setSubmitting(false);
+          }
+        }
+      });
+
+      googleBtnRef.current.innerHTML = "";
+      googleId.renderButton(googleBtnRef.current, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: mode === "login" ? "signin_with" : "signup_with",
+        shape: "pill",
+        width: 360,
+        logo_alignment: "left"
+      });
+    };
+
+    renderGoogleButton();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, loginWithGoogle, navigate, resetToken, forgotOpen]);
 
   const handleSubmit = async () => {
     clearMessages();
 
-    if (!isValidGmail(email)) {
-      setError("Sadece @gmail.com uzantılı e-posta kullanabilirsiniz.");
+    if (!email.trim()) {
+      setError("E-posta alanı zorunludur.");
       return;
     }
 
@@ -121,89 +141,215 @@ export default function AuthPage() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    clearMessages();
+    if (!forgotEmail.trim()) {
+      setError("Şifre yenileme için e-posta girin.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const json = await apiRequest("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email: forgotEmail.trim() })
+      });
+      setSuccess(json?.message || "Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.");
+    } catch (e) {
+      setError(e.message || "Şifre yenileme e-postası gönderilemedi.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    clearMessages();
+
+    if (!resetPassword || resetPassword.length < 6) {
+      setError("Yeni şifre en az 6 karakter olmalı.");
+      return;
+    }
+
+    if (resetPassword !== resetPasswordAgain) {
+      setError("Yeni şifre tekrar alanı uyuşmuyor.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const json = await apiRequest("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({ token: resetToken, password: resetPassword })
+      });
+
+      setSuccess(json?.message || "Şifreniz güncellendi. Giriş yapabilirsiniz.");
+      setResetPassword("");
+      setResetPasswordAgain("");
+      setSearchParams({});
+      setMode("login");
+    } catch (e) {
+      setError(e.message || "Şifre yenileme başarısız.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (isLoggedIn) {
+    return <Navigate to="/hesabim" replace />;
+  }
+
   return (
     <div className="container page-pad auth-wrap">
       <Breadcrumb items={[{ label: "Anasayfa", to: "/" }, { label: "Giriş / Kayıt" }]} />
       <div className="auth-card">
-        <div className="inline-actions">
-          <button
-            className={mode === "login" ? "primary-btn" : "secondary-btn"}
-            onClick={() => {
-              setMode("login");
-              clearMessages();
-            }}
-          >
-            Giriş Yap
-          </button>
-          <button
-            className={mode === "register" ? "primary-btn" : "secondary-btn"}
-            onClick={() => {
-              setMode("register");
-              clearMessages();
-            }}
-          >
-            Kayıt Ol
-          </button>
-        </div>
-
-        {mode === "register" && (
-          <div className="name-row">
-            <input placeholder="Ad" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-            <input placeholder="Soyad" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-          </div>
-        )}
-
-        <input placeholder="E-posta" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <div className="password-wrap">
-          <input
-            placeholder="Şifre"
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <button type="button" className="password-toggle" onClick={() => setShowPassword((s) => !s)}>
-            {showPassword ? "Gizle" : "Göster"}
-          </button>
-        </div>
-        {mode === "register" && (
-          <div className="password-wrap">
-            <input
-              placeholder="Şifre Tekrar"
-              type={showPasswordAgain ? "text" : "password"}
-              value={passwordAgain}
-              onChange={(e) => setPasswordAgain(e.target.value)}
-            />
-            <button type="button" className="password-toggle" onClick={() => setShowPasswordAgain((s) => !s)}>
-              {showPasswordAgain ? "Gizle" : "Göster"}
+        {resetToken ? (
+          <>
+            <h3>Yeni Şifre Belirle</h3>
+            <div className="password-wrap">
+              <input
+                placeholder="Yeni Şifre"
+                type={showPassword ? "text" : "password"}
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+              />
+              <button type="button" className="password-toggle" onClick={() => setShowPassword((s) => !s)}>
+                {showPassword ? "Gizle" : "Göster"}
+              </button>
+            </div>
+            <div className="password-wrap">
+              <input
+                placeholder="Yeni Şifre Tekrar"
+                type={showPasswordAgain ? "text" : "password"}
+                value={resetPasswordAgain}
+                onChange={(e) => setResetPasswordAgain(e.target.value)}
+              />
+              <button type="button" className="password-toggle" onClick={() => setShowPasswordAgain((s) => !s)}>
+                {showPasswordAgain ? "Gizle" : "Göster"}
+              </button>
+            </div>
+            {error && <p className="form-error">{error}</p>}
+            {success && <p className="form-success">{success}</p>}
+            <button className="primary-btn block" onClick={handleResetPassword} disabled={submitting}>
+              {submitting ? "İşleniyor..." : "Şifreyi Güncelle"}
             </button>
-          </div>
-        )}
+          </>
+        ) : forgotOpen ? (
+          <>
+            <h3>Şifre Yenileme</h3>
+            <input
+              type="email"
+              placeholder="Kayıtlı e-posta adresiniz"
+              value={forgotEmail}
+              onChange={(e) => setForgotEmail(e.target.value)}
+            />
+            {error && <p className="form-error">{error}</p>}
+            {success && <p className="form-success">{success}</p>}
+            <button type="button" className="primary-btn block" onClick={handleForgotPassword} disabled={submitting}>
+              {submitting ? "Gönderiliyor..." : "Şifre Sıfırlama Linki Gönder"}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn block"
+              onClick={() => {
+                setForgotOpen(false);
+                clearMessages();
+              }}
+            >
+              Giriş Ekranına Dön
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="inline-actions">
+              <button
+                className={mode === "login" ? "primary-btn" : "secondary-btn"}
+                onClick={() => {
+                  setMode("login");
+                  clearMessages();
+                }}
+              >
+                Giriş Yap
+              </button>
+              <button
+                className={mode === "register" ? "primary-btn" : "secondary-btn"}
+                onClick={() => {
+                  setMode("register");
+                  clearMessages();
+                }}
+              >
+                Kayıt Ol
+              </button>
+            </div>
 
-        {mode === "register" && password && passwordAgain && password !== passwordAgain && (
-          <p className="form-error">Şifre uyuşmuyor.</p>
-        )}
+            {mode === "register" && (
+              <div className="name-row">
+                <input placeholder="Ad" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                <input placeholder="Soyad" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+              </div>
+            )}
 
-        {error && <p className="form-error">{error}</p>}
-        {success && <p className="form-success">{success}</p>}
+            <input placeholder="E-posta" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <div className="password-wrap">
+              <input
+                placeholder="Şifre"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button type="button" className="password-toggle" onClick={() => setShowPassword((s) => !s)}>
+                {showPassword ? "Gizle" : "Göster"}
+              </button>
+            </div>
+            {mode === "register" && (
+              <div className="password-wrap">
+                <input
+                  placeholder="Şifre Tekrar"
+                  type={showPasswordAgain ? "text" : "password"}
+                  value={passwordAgain}
+                  onChange={(e) => setPasswordAgain(e.target.value)}
+                />
+                <button type="button" className="password-toggle" onClick={() => setShowPasswordAgain((s) => !s)}>
+                  {showPasswordAgain ? "Gizle" : "Göster"}
+                </button>
+              </div>
+            )}
 
-        <button className="primary-btn block" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? "İşleniyor..." : mode === "login" ? "Giriş Yap" : "Hesap Oluştur"}
-        </button>
+            {mode === "register" && password && passwordAgain && password !== passwordAgain && (
+              <p className="form-error">Şifre uyuşmuyor.</p>
+            )}
 
-        {mode === "register" && (
-          <button type="button" className="secondary-btn block" onClick={handleGooglePrompt}>
-            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" style={{ marginRight: 8, verticalAlign: "text-bottom" }}>
-              <path fill="#EA4335" d="M2 6.75 12 14l10-7.25V6a2 2 0 0 0-2-2h-1.5L12 8.75 5.5 4H4a2 2 0 0 0-2 2v.75z" />
-              <path fill="#4285F4" d="M22 8.5 12 15.75 2 8.5V18a2 2 0 0 0 2 2h1.5V10.25L12 15l6.5-4.75V20H20a2 2 0 0 0 2-2V8.5z" />
-              <path fill="#34A853" d="M2 8.5V18a2 2 0 0 0 2 2h1.5V10.25L2 8.5z" />
-              <path fill="#FBBC05" d="M22 8.5V18a2 2 0 0 1-2 2h-1.5V10.25L22 8.5z" />
-            </svg>
-            Gmail ile Bilgi Doldur
-          </button>
-        )}
+            {error && <p className="form-error">{error}</p>}
+            {success && <p className="form-success">{success}</p>}
 
-        {mode === "login" && (
-          <p className="muted">Şifre sıfırlama endpointi henüz backend'e eklenmedi.</p>
+            <button className="primary-btn block" onClick={handleSubmit} disabled={submitting}>
+              {submitting ? "İşleniyor..." : mode === "login" ? "Giriş Yap" : "Hesap Oluştur"}
+            </button>
+
+            {mode === "login" && (
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => {
+                  setForgotOpen(true);
+                  clearMessages();
+                }}
+              >
+                Şifremi Unuttum
+              </button>
+            )}
+
+            <div className="auth-divider" aria-hidden="true">
+              <span>veya</span>
+            </div>
+
+            {GOOGLE_CLIENT_ID ? (
+              <div className="google-auth-wrap">
+                <div ref={googleBtnRef} />
+              </div>
+            ) : (
+              <p className="form-error">Google girişi için VITE_GOOGLE_CLIENT_ID tanımlanmalıdır.</p>
+            )}
+          </>
         )}
       </div>
     </div>
