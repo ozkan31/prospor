@@ -29,6 +29,11 @@ const ensurePaytrConfig = () => {
 const generateMerchantOid = () => `PAYTR${Date.now()}${Math.floor(Math.random() * 1e6)}`;
 const withOid = (url, merchantOid) => `${url}${url.includes("?") ? "&" : "?"}oid=${encodeURIComponent(merchantOid)}`;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const getPublicBaseUrl = (req) => {
+  const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim() || "https";
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "prospor07.com").split(",")[0].trim() || "prospor07.com";
+  return `${proto}://${host}`;
+};
 
 const fetchPaytrTokenWithRetry = async (formBody) => {
   const maxAttempts = 3;
@@ -116,6 +121,9 @@ router.post("/token", authRequired, async (req, res) => {
     const userPhone = String(address.phone || "").replace(/\D/g, "");
     const userBasket = Buffer.from(JSON.stringify(basket)).toString("base64");
     const userIp = getClientIp(req);
+    const publicBaseUrl = getPublicBaseUrl(req);
+    const okUrl = `${publicBaseUrl}/odeme?paytr=ok`;
+    const failUrl = `${publicBaseUrl}/odeme?paytr=fail`;
 
     const hashStr = `${p.merchantId}${userIp}${merchantOid}${req.user.email}${paymentAmount}${userBasket}${p.noInstallment}${p.maxInstallment}${p.currency}${p.testMode}`;
     const paytrToken = crypto
@@ -137,8 +145,8 @@ router.post("/token", authRequired, async (req, res) => {
       user_name: userName,
       user_address: userAddress,
       user_phone: userPhone,
-      merchant_ok_url: withOid(p.okUrl, merchantOid),
-      merchant_fail_url: withOid(p.failUrl, merchantOid),
+      merchant_ok_url: withOid(okUrl, merchantOid),
+      merchant_fail_url: withOid(failUrl, merchantOid),
       timeout_limit: String(p.timeoutLimit),
       currency: p.currency,
       test_mode: String(p.testMode),

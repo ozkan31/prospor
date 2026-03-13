@@ -594,7 +594,7 @@ export default function CheckoutPage() {
                     <strong>Odeme tamamlanamadi.</strong>
                   </p>
                   <p>{paymentResult.message}</p>
-                  <button className="primary-btn" onClick={() => navigate("/odeme")}>Tekrar Dene</button>
+                  <button className="primary-btn" onClick={() => navigate("/sepet")}>Sepete Don ve Urunleri Tekrar Al</button>
                 </div>
               )}
               {!paymentResult.status || paymentResult.status === "idle" ? <p className="muted">Sonuc bekleniyor...</p> : null}
