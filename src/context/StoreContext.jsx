@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { apiRequest } from "../lib/api";
+import { apiRequest, fetchProducts } from "../lib/api";
 
 const StoreContext = createContext(null);
 const TOKEN_KEY = "prospor_token";
@@ -55,9 +55,9 @@ export function StoreProvider({ children }) {
   const isLoggedIn = Boolean(user?.email && token);
 
   const loadProducts = async () => {
-    const json = await apiRequest("/products");
-    setProducts(Array.isArray(json.products) ? json.products : []);
-    return json.products || [];
+    const list = await fetchProducts();
+    setProducts(list);
+    return list;
   };
 
   const loadUserData = async (authToken) => {
@@ -451,3 +451,5 @@ export function StoreProvider({ children }) {
 }
 
 export const useStore = () => useContext(StoreContext);
+
+

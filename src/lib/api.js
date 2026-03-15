@@ -34,4 +34,18 @@ export const apiRequest = async (path, options = {}, token = "") => {
   return response.json();
 };
 
+export const fetchProducts = async ({ limit, view = "list", signal } = {}) => {
+  const params = new URLSearchParams();
+  if (limit) params.set("limit", String(limit));
+  if (view && view !== "list") params.set("view", view);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const json = await apiRequest(`/products${query}`, { signal });
+  return Array.isArray(json?.products) ? json.products : [];
+};
+
+export const fetchProductById = async (id, { signal } = {}) => {
+  const json = await apiRequest(`/products/${encodeURIComponent(id)}`, { signal });
+  return json?.product || null;
+};
+
 export { API_BASE };

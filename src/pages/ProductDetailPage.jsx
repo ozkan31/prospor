@@ -1,16 +1,20 @@
-﻿import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Breadcrumb from "../components/Breadcrumb";
 import ProductGridSection from "../components/ProductGridSection";
 import RatingStars from "../components/RatingStars";
 import Toast from "../components/Toast";
 import { useStore } from "../context/StoreContext";
+import { fetchProductById } from "../lib/api";
 import { useSEO } from "../hooks/useSEO";
 
 export default function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart, toggleFavorite, favorites, products, user } = useStore();
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [activeImg, setActiveImg] = useState(0);
   const [selectedSize, setSelectedSize] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
@@ -18,14 +22,48 @@ export default function ProductDetailPage() {
   const [addedToCart, setAddedToCart] = useState(false);
   const touchStartX = useRef(0);
 
-  const product = products.find((p) => p.id === id);
+  useEffect(() => {
+    let ignore = false;
+    const controller = new AbortController();
+
+    const loadProduct = async () => {
+      setLoading(true);
+      setLoadError("");
+      setActiveImg(0);
+      setSelectedSize(null);
+      setSelectedColor(null);
+
+      try {
+        const nextProduct = await fetchProductById(id, { signal: controller.signal });
+        if (!ignore) {
+          setProduct(nextProduct);
+        }
+      } catch (error) {
+        if (!ignore && error.name !== "AbortError") {
+          setProduct(null);
+          setLoadError(error.message || "Urun alinamadi.");
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadProduct();
+    return () => {
+      ignore = true;
+      controller.abort();
+    };
+  }, [id]);
+
   const similar = useMemo(
-    () => products.filter((p) => p.id !== id && p.category.some((c) => product?.category.includes(c))).slice(0, 4),
+    () => products.filter((item) => item.id !== id && item.category.some((c) => product?.category.includes(c))).slice(0, 4),
     [id, product, products]
   );
 
   useSEO({
-    title: product ? product.name : "Ürün",
+    title: product ? product.name : "Urun",
     description: product?.description,
     schema: product
       ? {
@@ -38,11 +76,20 @@ export default function ProductDetailPage() {
       : undefined
   });
 
+  if (loading) {
+    return (
+      <div className="container page-pad">
+        <h1>Urun yukleniyor...</h1>
+      </div>
+    );
+  }
+
   if (!product) {
     return (
       <div className="container page-pad">
-        <h1>Ürün bulunamadı</h1>
-        <Link to="/urunler" className="primary-btn">Ürünlere Dön</Link>
+        <h1>Urun bulunamadi</h1>
+        {loadError && <p className="form-error">{loadError}</p>}
+        <Link to="/urunler" className="primary-btn">Urunlere Don</Link>
       </div>
     );
   }
@@ -51,23 +98,23 @@ export default function ProductDetailPage() {
 
   const addWithToast = async () => {
     if (!hasVariantSelection) {
-      setToast("Lütfen renk ve numara seçin");
+      setToast("Lutfen renk ve numara secin");
       return false;
     }
 
     try {
       const added = await addToCart(product.id, 1, selectedSize, selectedColor);
       if (!added) {
-        setToast("Ürün sepete eklenemedi");
+        setToast("Urun sepete eklenemedi");
         return false;
       }
 
-      setToast("Ürün sepete eklendi");
+      setToast("Urun sepete eklendi");
       setAddedToCart(true);
       setTimeout(() => setAddedToCart(false), 1300);
       return true;
     } catch (error) {
-      setToast(error.message || "Ürün sepete eklenemedi");
+      setToast(error.message || "Urun sepete eklenemedi");
       return false;
     }
   };
@@ -100,7 +147,7 @@ export default function ProductDetailPage() {
 
   return (
     <div className="container page-pad">
-      <Breadcrumb items={[{ label: "Anasayfa", to: "/" }, { label: "Ürünler", to: "/urunler" }, { label: product.name }]} />
+      <Breadcrumb items={[{ label: "Anasayfa", to: "/" }, { label: "Urunler", to: "/urunler" }, { label: product.name }]} />
 
       <section className="pdp-layout">
         <div className="pdp-media">
@@ -114,20 +161,20 @@ export default function ProductDetailPage() {
             />
             {product.gallery.length > 1 && (
               <>
-                <button type="button" className="pdp-image-nav prev" onClick={prevImage} aria-label="Önceki fotoğraf">‹</button>
-                <button type="button" className="pdp-image-nav next" onClick={nextImage} aria-label="Sonraki fotoğraf">›</button>
+                <button type="button" className="pdp-image-nav prev" onClick={prevImage} aria-label="Onceki fotograf">{"\u2039"}</button>
+                <button type="button" className="pdp-image-nav next" onClick={nextImage} aria-label="Sonraki fotograf">{"\u203A"}</button>
               </>
             )}
           </div>
           {product.gallery.length > 1 && (
-            <div className="pdp-dots" aria-label="Ürün görselleri">
+            <div className="pdp-dots" aria-label="Urun gorselleri">
               {product.gallery.map((_, idx) => (
                 <button
                   key={`dot-${idx}`}
                   type="button"
                   className={`pdp-dot ${idx === activeImg ? "active" : ""}`}
                   onClick={() => setActiveImg(idx)}
-                  aria-label={`Fotoğraf ${idx + 1}`}
+                  aria-label={`Fotograf ${idx + 1}`}
                 />
               ))}
             </div>
@@ -144,19 +191,19 @@ export default function ProductDetailPage() {
         <aside className="pdp-buybox">
           <p className="brand">{product.brand}</p>
           <h1>{product.name}</h1>
-          <div className="rating-row"><RatingStars value={product.rating} /><span>{product.reviews} değerlendirme</span></div>
+          <div className="rating-row"><RatingStars value={product.rating} /><span>{product.reviews} degerlendirme</span></div>
 
           <div className="price-row large">
             <strong>{product.price.toLocaleString("tr-TR")} TL</strong>
             {product.oldPrice && <span>{product.oldPrice.toLocaleString("tr-TR")} TL</span>}
           </div>
-          <p className="stock">Stok: {product.stock > 0 ? "Mevcut" : "Tükendi"}</p>
+          <p className="stock">Stok: {product.stock > 0 ? "Mevcut" : "Tukendi"}</p>
 
           <div className="option-block">
             <h4>Renk</h4>
             <div className="option-row">
-              {product.colors.map((c) => (
-                <button key={c} className={selectedColor === c ? "active" : ""} onClick={() => setSelectedColor(c)}>{c}</button>
+              {product.colors.map((color) => (
+                <button key={color} className={selectedColor === color ? "active" : ""} onClick={() => setSelectedColor(color)}>{color}</button>
               ))}
             </div>
           </div>
@@ -164,8 +211,8 @@ export default function ProductDetailPage() {
           <div className="option-block">
             <h4>Numara</h4>
             <div className="option-row">
-              {product.sizes.map((s) => (
-                <button key={s} className={selectedSize === s ? "active" : ""} onClick={() => setSelectedSize(s)}>{s}</button>
+              {product.sizes.map((size) => (
+                <button key={size} className={selectedSize === size ? "active" : ""} onClick={() => setSelectedSize(size)}>{size}</button>
               ))}
             </div>
           </div>
@@ -183,28 +230,31 @@ export default function ProductDetailPage() {
                   return;
                 }
                 const ok = await toggleFavorite(product.id);
-                if (!ok) setToast("Favori için giriş yapın");
+                if (!ok) setToast("Favori icin giris yapin");
               }}
             >
-              {favorites.includes(product.id) ? "♥" : "♡"}
+              {favorites.includes(product.id) ? "\u2665" : "\u2661"}
             </button>
           </div>
 
           <div className="pdp-meta">
-            <p><strong>Ürün Açıklaması:</strong> {product.description}</p>
-            <p><strong>Teknik Özellikler:</strong> {product.specs.join(", ")}</p>
-            <p><strong>Kullanım Alanı:</strong> {product.usage}</p>
+            <p><strong>Urun Aciklamasi:</strong> {product.description}</p>
+            <p><strong>Teknik Ozellikler:</strong> {product.specs.join(", ")}</p>
+            <p><strong>Kullanim Alani:</strong> {product.usage}</p>
             <p><strong>Kargo:</strong> {product.shipping}</p>
-            <p><strong>İade:</strong> {product.returns}</p>
-            <p><strong>Taksit:</strong> Peşin fiyatına 3 taksit ve anlaşmalı bankalarda 6 taksit.</p>
+            <p><strong>Iade:</strong> {product.returns}</p>
+            <p><strong>Taksit:</strong> Pesin fiyatina 3 taksit ve anlasmali bankalarda 6 taksit.</p>
           </div>
         </aside>
       </section>
 
-      <ProductGridSection title="Benzer Ürünler" products={similar} gridClassName="grid-2" />
-      <ProductGridSection title="Birlikte Alınan Ürünler" products={[...similar].reverse()} gridClassName="grid-2" />
+      <ProductGridSection title="Benzer Urunler" products={similar} gridClassName="grid-2" />
+      <ProductGridSection title="Birlikte Alinan Urunler" products={[...similar].reverse()} gridClassName="grid-2" />
 
       <Toast message={toast} />
     </div>
   );
 }
+
+
+
