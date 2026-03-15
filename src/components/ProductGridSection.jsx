@@ -1,6 +1,6 @@
 import ProductCard from "./ProductCard";
 
-export default function ProductGridSection({ title, subtitle, products, onQuickView, gridClassName = "" }) {
+export default function ProductGridSection({ title, subtitle, products, onQuickView, gridClassName = "", priorityCount = 0 }) {
   return (
     <section className="section-block">
       <div className="section-head">
@@ -9,9 +9,10 @@ export default function ProductGridSection({ title, subtitle, products, onQuickV
       </div>
       <div className={`product-grid ${gridClassName}`.trim()}>
         {products.map((product, idx) => (
-          <ProductCard key={product.id} product={product} onQuickView={onQuickView} priority={idx < 4} />
+          <ProductCard key={product.id} product={product} onQuickView={onQuickView} priority={idx < priorityCount} />
         ))}
       </div>
     </section>
   );
 }
+

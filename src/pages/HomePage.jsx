@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import ProductGridSection from "../components/ProductGridSection";
@@ -136,7 +136,7 @@ export default function HomePage() {
     const list = visibleProducts.filter((product) => product.category.includes("running") || product.category.includes("sport"));
     return (list.length ? list : visibleProducts).slice(0, 4);
   }, [visibleProducts]);
-  const topTickerProducts = useMemo(() => visibleProducts.slice(0, 6), [visibleProducts]);
+  const topTickerProducts = useMemo(() => visibleProducts.slice(0, 4), [visibleProducts]);
   const filteredFromHome = useMemo(() => filterProducts(visibleProducts, homeFilters).slice(0, 8), [homeFilters, visibleProducts]);
 
   return (
@@ -200,7 +200,7 @@ export default function HomePage() {
       )}
 
       <DeferredSection minHeight={640}>
-        <ProductGridSection title="En Populer" subtitle="Topluluk tarafindan en cok tercih edilen modeller" products={popular} gridClassName="home-product-grid" />
+        <ProductGridSection title="En Populer" subtitle="Topluluk tarafindan en cok tercih edilen modeller" products={popular} gridClassName="home-product-grid" priorityCount={4} />
       </DeferredSection>
 
       <DeferredSection minHeight={540}>
@@ -225,10 +225,10 @@ export default function HomePage() {
       </DeferredSection>
 
       <DeferredSection minHeight={640}>
-        <ProductGridSection title="Yeni Gelenler" subtitle="Bu haftanin yeni eklenen modelleri" products={newest} gridClassName="home-product-grid" />
+        <ProductGridSection title="Yeni Gelenler" subtitle="Bu haftanin yeni eklenen modelleri" products={newest} gridClassName="home-product-grid" priorityCount={0} />
       </DeferredSection>
       <DeferredSection minHeight={640}>
-        <ProductGridSection title="Kosu ve Antrenman" subtitle="Yuksek performans serisi" products={running} gridClassName="home-product-grid" />
+        <ProductGridSection title="Kosu ve Antrenman" subtitle="Yuksek performans serisi" products={running} gridClassName="home-product-grid" priorityCount={0} />
       </DeferredSection>
 
       <DeferredSection minHeight={300}>
@@ -252,3 +252,4 @@ export default function HomePage() {
     </div>
   );
 }
+

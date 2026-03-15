@@ -1,12 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
+import sharp from "sharp";
 import express from "express";
 import { pool } from "../db.js";
-import { createProductImageUrl, normalizeProduct, normalizeProductList, parseJsonArray } from "../utils.js";
+import { normalizeProduct, normalizeProductList, parseJsonArray } from "../utils.js";
 
 const router = express.Router();
 const imageCache = new Map();
 const uploadsRoot = path.resolve(process.cwd(), "uploads");
+const imageCacheRoot = path.join(uploadsRoot, ".thumb-cache");
+const imagePresets = {
+  card: { width: 520, height: 520, fit: "cover", quality: 72 },
+  detail: { width: 1280, height: 1280, fit: "inside", quality: 82 },
+  ticker: { width: 320, height: 320, fit: "cover", quality: 68 }
+};
 
 const toPositiveInt = (value, fallback = 0, max = 120) => {
   const parsed = Number.parseInt(String(value || ""), 10);
@@ -30,6 +37,37 @@ const rememberProductImages = (rows) => {
   for (const row of rows) {
     imageCache.set(row.id, getProductMediaPaths(row));
   }
+};
+
+const toSafeCacheKey = (value) => String(value || "file").replace(/[^a-z0-9_-]/gi, "_");
+const getImagePreset = (size) => imagePresets[String(size || "").trim()] || null;
+
+const ensureThumbFile = async (sourcePath, productId, index, size) => {
+  const preset = getImagePreset(size);
+  if (!preset) return sourcePath;
+
+  await fs.promises.mkdir(imageCacheRoot, { recursive: true });
+  const thumbPath = path.join(imageCacheRoot, `${toSafeCacheKey(productId)}-${index}-${size}.webp`);
+
+  const [sourceStat, thumbStat] = await Promise.allSettled([
+    fs.promises.stat(sourcePath),
+    fs.promises.stat(thumbPath)
+  ]);
+
+  const sourceMtime = sourceStat.status === "fulfilled" ? sourceStat.value.mtimeMs : 0;
+  const thumbMtime = thumbStat.status === "fulfilled" ? thumbStat.value.mtimeMs : 0;
+
+  if (thumbMtime >= sourceMtime && thumbMtime > 0) {
+    return thumbPath;
+  }
+
+  await sharp(sourcePath)
+    .rotate()
+    .resize({ width: preset.width, height: preset.height, fit: preset.fit, withoutEnlargement: true })
+    .webp({ quality: preset.quality })
+    .toFile(thumbPath);
+
+  return thumbPath;
 };
 
 const listSelect = `
@@ -71,6 +109,7 @@ router.get("/", async (req, res) => {
 router.get("/:id/image/:index", async (req, res) => {
   try {
     const index = Math.max(0, Number.parseInt(req.params.index, 10) || 0);
+    const requestedSize = String(req.query.size || "").trim();
     let mediaPaths = imageCache.get(req.params.id);
 
     if (!mediaPaths) {
@@ -94,8 +133,9 @@ router.get("/:id/image/:index", async (req, res) => {
       return res.status(404).json({ message: "Gorsel bulunamadi." });
     }
 
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    return res.sendFile(absolutePath);
+    const fileToSend = await ensureThumbFile(absolutePath, req.params.id, index, requestedSize);
+    res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
+    return res.sendFile(fileToSend);
   } catch (error) {
     return res.status(500).json({ message: "Gorsel alinamadi.", error: error.message });
   }
