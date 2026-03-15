@@ -9,7 +9,10 @@ export const parseJsonArray = (value) => {
   }
 };
 
-export const createProductImageUrl = (productId, index = 0, size = "") => {`r`n  const query = size ? `?size=${encodeURIComponent(size)}` : "";`r`n  return `/api/products/${encodeURIComponent(productId)}/image/${index}${query}`;`r`n};
+export const createProductImageUrl = (productId, index = 0, size = "") => {
+  const query = size ? `?size=${encodeURIComponent(size)}` : "";
+  return `/api/products/${encodeURIComponent(productId)}/image/${index}${query}`;
+};
 
 export const normalizeProductList = (row) => ({
   id: row.id,
@@ -47,8 +50,8 @@ export const normalizeProduct = (row) => {
     colors: parseJsonArray(row.colors_json),
     sizes: parseJsonArray(row.sizes_json),
     stock: Number(row.stock),
-    image: createProductImageUrl(row.id, 0, "card"),
-    gallery: resolvedGallery.map((_item, imageIndex) => createProductImageUrl(row.id, imageIndex)),
+    image: createProductImageUrl(row.id, 0, "detail"),
+    gallery: resolvedGallery.map((_item, imageIndex) => createProductImageUrl(row.id, imageIndex, "detail")),
     description: row.description,
     specs: parseJsonArray(row.specs_json),
     usage: row.usage_text,
